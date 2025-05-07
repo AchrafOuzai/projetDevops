@@ -11,18 +11,21 @@ services:
       options:
         max-size: "25m"
         max-file: "2"
+
   redis:
     image: redis:6.2-alpine
     networks:
       - robot-shop
     logging:
       <<: *logging
+
   rabbitmq:
     image: rabbitmq:3.8-management-alpine
     networks:
       - robot-shop
     logging:
       <<: *logging
+
   catalogue:
     build:
       context: catalogue
@@ -32,12 +35,13 @@ services:
     networks:
       - robot-shop
     healthcheck:
-      test: [ "CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8080/health" ]
+      test: [ "CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8099/health" ]
       interval: 10s
       timeout: 10s
       retries: 3
     logging:
       <<: *logging
+
   user:
     build:
       context: user
@@ -48,12 +52,13 @@ services:
     networks:
       - robot-shop
     healthcheck:
-      test: [ "CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8080/health" ]
+      test: [ "CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8099/health" ]
       interval: 10s
       timeout: 10s
       retries: 3
     logging:
       <<: *logging
+
   cart:
     build:
       context: cart
@@ -63,12 +68,13 @@ services:
     networks:
       - robot-shop
     healthcheck:
-      test: [ "CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8080/health" ]
+      test: [ "CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8099/health" ]
       interval: 10s
       timeout: 10s
       retries: 3
     logging:
       <<: *logging
+
   mysql:
     build:
       context: mysql
@@ -79,6 +85,7 @@ services:
       - robot-shop
     logging:
       <<: *logging
+
   shipping:
     build:
       context: shipping
@@ -88,12 +95,13 @@ services:
     networks:
       - robot-shop
     healthcheck:
-      test: ["CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8099/health"]
       interval: 10s
       timeout: 10s
       retries: 3
     logging:
       <<: *logging
+
   ratings:
     build:
       context: ratings
@@ -111,6 +119,7 @@ services:
       retries: 3
     logging:
       <<: *logging
+
   payment:
     build:
       context: payment
@@ -120,7 +129,7 @@ services:
     networks:
       - robot-shop
     healthcheck:
-      test: ["CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8099/health"]
       interval: 10s
       timeout: 10s
       retries: 3
@@ -129,6 +138,7 @@ services:
       #PAYMENT_GATEWAY: "https://www.worldpay.com"
     logging:
       <<: *logging
+
   dispatch:
     build:
       context: dispatch
@@ -139,6 +149,7 @@ services:
       - robot-shop
     logging:
       <<: *logging
+
   web:
     build:
       context: web
@@ -152,11 +163,11 @@ services:
       - shipping
       - payment
     ports:
-      - "8080:8080"
+      - "8099:8080"
     networks:
       - robot-shop
     healthcheck:
-      test: [ "CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8080/" ]
+      test: [ "CMD", "curl", "-H", "X-INSTANA-SYNTHETIC: 1", "-f", "http://localhost:8099/" ]
       interval: 10s
       timeout: 10s
       retries: 3
@@ -167,6 +178,56 @@ services:
     logging:
       <<: *logging
 
+  loki:
+    image: grafana/loki:2.9.1
+    container_name: loki
+    user: "0"  # Exécuter en tant que root pour éviter les problèmes de permission
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/loki-config.yaml
+      - loki-data:/tmp/loki  # Volume pour stocker les données persistantes
+      - loki-wal:/tmp/wal    # Volume pour le WAL
+    command: -config.file=/etc/loki/loki-config.yaml
+    networks:
+      - robot-shop
+
+  promtail:
+    image: grafana/promtail:2.9.1
+    container_name: promtail
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - ./promtail-config.yaml:/etc/promtail/promtail.yaml
+    command: -config.file=/etc/promtail/promtail.yaml
+    networks:
+      - robot-shop
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:10.0.3
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - robot-shop
+    depends_on:
+      - loki
+
 networks:
   robot-shop:
+# Ajouter ces volumes à la section volumes existante
+volumes:
+  grafana-storage:
+  loki-data:
+  loki-wal:
+
+
+
 
